@@ -1,18 +1,25 @@
 #include <stddef.h>
 
-#define MAX_ALLOWED 256
+// Define the Status Codes (The "Contract")
+typedef enum {
+    GUARDIAN_SUCCESS = 0,
+    GUARDIAN_OVERFLOW = -1,
+    GUARDIAN_NULL_PTR = -2
+} GuardianStatus;
 
 /**
- * CN2 Boundary Guardian v1.1 - Hardened API
- * No strlen() usage. Length is enforced by the caller.
+ * CN2 Boundary Guardian v1.2
+ * Returns named status codes for better API integration.
  */
-int validate_guardian(const char* input_payload, size_t input_len) {
-    if (!input_payload) return -2; // ERROR: Null Pointer
-
-    // Metal-Level Boundary Enforcement
-    if (input_len >= MAX_ALLOWED) {
-        return -1; // REJECTED: Overflow detected
+GuardianStatus validate_guardian(const char* input_payload, size_t input_len) {
+    if (!input_payload) {
+        return GUARDIAN_NULL_PTR;
     }
 
-    return (int)input_len; // ACCEPTED: Returns safe byte count
+    // Metal-Level Boundary Enforcement
+    if (input_len >= 256) {
+        return GUARDIAN_OVERFLOW;
+    }
+
+    return GUARDIAN_SUCCESS;
 }

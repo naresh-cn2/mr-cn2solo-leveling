@@ -1,38 +1,39 @@
-import subprocess
-import json
+import ctypes
+from enum import IntEnum
+from pathlib import Path
 
-def validate_payload(payload: str):
-    """
-    High-speed C-Logic Bridge.
-    Pipes Python data into the CN2 C-Guardian for metal-level validation.
-    """
-    # 1. Initialize the C-Binary process
-    process = subprocess.Popen(
-        ['./cn2_guardian'], 
-        stdin=subprocess.PIPE, 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.PIPE,
-        text=True
-    )
+# Map the C-Enum exactly so Python understands the metal's language
+class GuardianStatus(IntEnum):
+    SUCCESS = 0
+    OVERFLOW = -1
+    NULL_PTR = -2
 
-    # 2. Pipe the Python payload into the C-Engine
-    stdout, stderr = process.communicate(input=payload)
+class CN2Guardian:
+    def __init__(self):
+        # Self-locating library logic
+        lib_path = Path(__file__).parent / "libguardian.so"
+        self._lib = ctypes.CDLL(str(lib_path))
+        self._lib.validate_guardian.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
+        self._lib.validate_guardian.restype = ctypes.c_int
 
-    # 3. Return the structured JSON audit log
-    try:
-        return json.loads(stdout)
-    except json.JSONDecodeError:
-        return {"status": "ERROR", "reason": "C_ENGINE_COMMUNICATION_FAILURE"}
+    def inspect(self, data: str) -> GuardianStatus:
+        """High-speed boundary inspection."""
+        if data is None:
+            return GuardianStatus.NULL_PTR
+        
+        # Convert to bytes for the C engine
+        b_data = data.encode('utf-8')
+        result = self._lib.validate_guardian(b_data, len(b_data))
+        
+        # Convert the raw integer back into a readable Status Name
+        return GuardianStatus(result)
 
-# --- LIVE TEST SUITE ---
+# --- THE PROOF ---
 if __name__ == "__main__":
-    print("--- TESTING PYTHON-TO-C BRIDGE ---")
+    gate = CN2Guardian()
     
-    # Test 1: Safe Logic
-    safe_test = validate_payload("user_id_123_auth_token")
-    print(f"SAFE TEST: {safe_test['status']} (ID: {safe_test['request_id']})")
-
-    # Test 2: Attack Logic
-    attack_payload = "X" * 500
-    attack_test = validate_payload(attack_payload)
-    print(f"ATTACK TEST: {attack_test['status']} (Reason: {attack_test['reason']})")
+    # Test 1: Normal Data
+    print(f"Normal Check: {gate.inspect('hello_world').name}")
+    
+    # Test 2: Attack Data
+    print(f"Attack Check: {gate.inspect('X' * 500).name}")
